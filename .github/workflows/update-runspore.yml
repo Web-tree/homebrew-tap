@@ -52,5 +52,5 @@ jobs:
         os: [macos-latest, ubuntu-latest, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: Homebrew/actions/setup-homebrew@master
+      - uses: Homebrew/actions/setup-homebrew@main
       - run: brew install web-tree/tap/runspore && brew test runspore
