@@ -1,0 +1,56 @@
+name: update runspore
+
+# Checks for a new runspore release and commits the regenerated formula.
+# runspore's release workflow can also trigger this with repository_dispatch.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (default: newest)"
+        required: false
+  repository_dispatch:
+    types: [runspore-release]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-runspore
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Regenerate the formula
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.event.client_payload.tag }}
+        run: scripts/update-runspore.sh $TAG
+      - name: Commit if changed
+        id: commit
+        run: |
+          git diff --quiet && { echo "already current"; exit 0; }
+          version=$(sed -n 's/^  version "\(.*\)"/\1/p' Formula/runspore.rb)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "runspore $version"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: update
+    if: needs.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-13, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: Homebrew/actions/setup-homebrew@master
+      - run: brew install web-tree/tap/runspore && brew test runspore
